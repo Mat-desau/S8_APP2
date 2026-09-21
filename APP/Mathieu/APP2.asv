@@ -4,21 +4,15 @@ close all
 
 % Loader les images
 Isource = imread("lenna.bmp");
-[L1, C1, Z1] = size(Isource);
+[L1, C1] = size(Isource);
 
-% Pour avoir le RGB 
-R = Isource(:,:,1);
-G = Isource(:,:,2);
-B = Isource(:,:,3);
-% Refaire la modifier en 1 couleur
-IsourceMod = (R+G+B)/3;
+IsourceMod = (Isource(:,:,1)+Isource(:,:,2)+Isource(:,:,3))/3;
 
-% Redimension
 L2 = 256;
 C2 = 256;
+
 Iredim = zeros(L2, C2);
 
-% FOR pour redimensioner
 for l = 1 : L2-1
     for c = 1 : C2-1
         ll = floor(l*L1/L2);
@@ -27,7 +21,7 @@ for l = 1 : L2-1
     end
 end
 
-% Affichage
+% Pour montrer
 figure(1)
 imshow(IsourceMod);
 figure(2)
