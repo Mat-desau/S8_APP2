@@ -4,25 +4,113 @@ close all
 
 % Loader les images
 Isource = imread("lenna.bmp");
-[L1, C1] = size(Isource);
+[L1, C1, Z1] = size(Isource);
 
-IsourceMod = (Isource(:,:,1)+Isource(:,:,2)+Isource(:,:,3))/3;
+% Pour avoir le RGB 
+R = Isource(:,:,1);
+G = Isource(:,:,2);
+B = Isource(:,:,3);
+% Refaire la modifier en 1 couleur
+IsourceMod = (R+G+B)/3;
 
-L2 = 256;
-C2 = 256;
-
+%% Redimensionnement
+% Redimension
+Facteur = 2;
+L2 = L1 / Facteur;
+C2 = C1 / Facteur;
 Iredim = zeros(L2, C2);
 
+% FOR pour redimensioner
 for l = 1 : L2-1
     for c = 1 : C2-1
         ll = floor(l*L1/L2);
         cc = floor(c*C1/C2);
-        Iredim(l, c) = IsourceMod(ll, cc);
+        Iredim(l, c) = Isource(ll, cc);
     end
 end
 
-% Pour montrer
+%% Quantificateur
+m = mean(Isource(:));
+sigma = std(double(Isource(:)));
+
+Delta = 0.433;
+nbits = 3;
+
+global seuils_decision codes niveau_reconstruction
+[seuils_decision, codes, niveau_reconstruction] = genere_quantif(nbits, Delta);
+
+for l = 1 : L1
+    for c = 1 : C1
+        Inormaliser(l, c) = (double(Isource(l, c))-m)/sigma;
+        Icode(l, c) = Q93(Inormaliser(l,c),Delta);
+        InormQ(l, c) = Q93_1(Icode(l, c),Delta);
+        IDecoder(l, c) = (InormQ(l, c)*sigma)+m;
+    end
+end
+
+
+%% Affichage
 figure(1)
-imshow(IsourceMod);
+imshow(Isource);
 figure(2)
 imshow(uint8(Iredim))
+figure(3)
+imshow(uint8(Icode))
+figure(4)
+imshow(uint8(InormQ))
+figure(5)
+imshow(uint8(IDecoder))
+
+%% Fonction Q93
+function Icode = Q93(Inormaliser, Delta)
+    global seuils_decision codes niveau_reconstruction
+
+    [L, C] = size(Inormaliser);
+    Icode = zeros(L, C);
+
+    for l = 1:L
+        for c = 1:C
+            x = Inormaliser(l, c);
+            for i = 1:length(codes)
+                if x > seuils_decision(i) && x <= seuils_decision(i+1)
+                    Icode(l, c) = codes(i);
+                    break;
+                end
+            end
+        end
+    end
+end
+
+%% Fonction Q93_1
+function InormQ = Q93_1(Icode, Delta)
+    global seuils_decision codes niveau_reconstruction
+
+    [L, C] = size(Icode);
+    InormQ = zeros(L, C);
+
+    for l = 1:L
+        for c = 1:C
+            for i = 1 : length(codes)
+                if Icode(l,c) == codes(i)
+                    InormQ(l, c) = niveau_reconstruction(i);
+                    break;
+                end
+            end
+        end
+    end
+end
+
+%% Generation de quantification
+function [seuils_decision, codes, niveau_reconstruction] = genere_quantif(nbits, Delta)
+
+    N = 2^nbits;  % nombre de niveaux, ex: 8 pour nbits=3
+    codes = 0:(N-1);
+
+    % Seuils de décision : -inf, puis symétriques autour de 0, puis +inf
+    % Pour N niveaux, il y a N-1 seuils internes
+    seuils_internes = ((-N/2+1):(N/2-1)) * Delta;
+    seuils_decision = [-inf, seuils_internes, inf];
+
+    % Niveaux de reconstruction : centre de chaque intervalle
+    niveau_reconstruction = ((-N+1):2:(N-1)) * Delta/2;
+end
