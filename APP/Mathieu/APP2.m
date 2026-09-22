@@ -18,9 +18,10 @@ global seuils_decision codes niveau_reconstruction
 
 
 % Isource = imread("lenna.bmp");
-Isource = imread("cman.tif");
-% Isource = imread("irm.tif");
+% Isource = imread("cman.tif");
+Isource = imread("irm.tif");
 % Isource = imread("mandrill.tif");
+% Isource = imread("crest.bmp");
 [L1, C1, Z] = size(Isource);
 
 if Z == 3
@@ -94,51 +95,97 @@ else
 end
 
 %% Quantificateur Scalaire (QS)
-m = mean(IsourceMod(:));
-sigma = std(double(IsourceMod(:)));
+m = mean(Iredim_PPV(:));
+sigma = std(double(Iredim_PPV(:)));
 
-Delta = 0.866;
-nbits = 4;
+% Bits = [2, 4, 6, 8, 10, 12, 14, 16, 32];
+% Delta_vals = [1.414, 1.0873, 0.8707, 0.7309, 0.6334, 0.5613, 0.5055, 0.4609, 0.2799];
+% Delta_vals = [1.596, 0.9957, 0.7334, 0.5860, 0.4908, 0.4238, 0.3739, 0.3352, 0.1881];
+% delta_map = containers.Map(Bits, Delta_vals);
+
+nbits = 5;
+N = 2^nbits;
+Delta = 0.1881;
 
 [seuils_decision, codes, niveau_reconstruction] = genere_quantif(nbits, Delta);
 
-for l = 1 : L1
-    for c = 1 : C1
-        Inormaliser(l, c) = (IsourceMod(l, c)-m)/sigma;
-        Icode(l, c) = Q93(Inormaliser(l,c),Delta);
-        InormQ(l, c) = Q93_1(Icode(l, c),Delta);
-        IDecoder(l, c) = (InormQ(l, c)*sigma)+m;
+for l = 1 : L2
+    for c = 1 : C2
+        Inormaliser(l, c) = (Iredim_PPV(l, c)-m)/sigma;
+        Icode(l, c) = Q93(Inormaliser(l,c));
+        InormQ(l, c) = Q93_1(Icode(l, c));
+        IDecoder_QS(l, c) = (InormQ(l, c)*sigma)+m;
     end
 end
+sigma2 = mean((double(Iredim_PPV(:))-double(IDecoder_QS(:))).^2);
+PSNR_QS = 10 * log10((255^2)/(sigma2));
 
 %% Quantificateur Différentiel (DPCM)
-Delta_DPCM = 8;
-nbits_DPCM = 5;
+Icode_DPCM = zeros(L2, C2);
 
-% On régénère les globales avec les paramètres du DPCM
-[seuils_decision, codes, niveau_reconstruction] = genere_quantif(nbits_DPCM, Delta_DPCM);
+nbits = 5;
+N = 2^nbits;
+Delta = 0.2779;
 
-Icode_DPCM = zeros(L1, C1);
-IDecoder_DPCM = zeros(L1, C1);
+[seuils_decision, codes, niveau_reconstruction] = genere_quantif(nbits, Delta);
 
-for l = 1 : L1
-    xr_prec = 128;   % prédiction initiale en début de ligne (valeur neutre)
-    for c = 1 : C1
-        x = IsourceMod(l, c);
 
-        xpred = xr_prec;
-        e = x - xpred;
+for l = 1 : L2
+    for c = 1 : C2
+        % Prédiction
+        if l == 1 && c == 1
+            xpred = 128;
+        elseif l == 1
+            xpred = Iredim_PPV(l, c-1);
+        elseif c == 1
+            xpred = Iredim_PPV(l-1, c);
+        else
+            p1 = 0.5*Iredim_PPV(l-1, c)   + 0.5*Iredim_PPV(l, c-1);
+            p2 = 0.5*Iredim_PPV(l-1, c-1) + 0.5*Iredim_PPV(l, c-1);
+            p3 = 0.5*Iredim_PPV(l-1, c-1) + 0.5*Iredim_PPV(l-1, c);
+            xpred = median([p1, p2, p3]);
+        end
 
-        Icode_DPCM(l, c) = Q93(e, Delta_DPCM);
-        eq = Q93_1(Icode_DPCM(l, c), Delta_DPCM);
-
-        xr = xpred + eq;
-        IDecoder_DPCM(l, c) = xr;
-
-        % Mise à jour pour le pixel suivant
-        xr_prec = xr;
+        % Erreur de prédiction
+        erreur_DPCM(l,c) = Iredim_PPV(l, c) - xpred;
     end
 end
+
+m = mean(erreur_DPCM(:));
+sigma = std(double(erreur_DPCM(:)));
+
+for l = 1 : L2
+    for c = 1 : C2
+        % Prédiction
+        if l == 1 && c == 1
+            xpred = 128;
+        elseif l == 1
+            xpred = Iredim_PPV(l, c-1);
+        elseif c == 1
+            xpred = Iredim_PPV(l-1, c);
+        else
+            p1 = 0.5*Iredim_PPV(l-1, c)   + 0.5*Iredim_PPV(l, c-1);
+            p2 = 0.5*Iredim_PPV(l-1, c-1) + 0.5*Iredim_PPV(l, c-1);
+            p3 = 0.5*Iredim_PPV(l-1, c-1) + 0.5*Iredim_PPV(l-1, c);
+            xpred = median([p1, p2, p3]);
+        end
+
+        % Erreur de prédiction
+        e = Iredim_PPV(l, c) - xpred;
+
+        I_DPCM = (e-m)/sigma;
+
+        % Quantification de l'erreur
+        Icode_DPCM = Q93(I_DPCM);
+        eq = Q93_1(Icode_DPCM);
+    
+        % Reconstruction
+        IDecoder_DPCM(l, c) = ((eq*sigma)+m)+xpred;
+    end
+end
+
+sigma2 = mean((double(Iredim_PPV(:))-double(IDecoder_DPCM(:))).^2);
+PSNR_DPCM = 10 * log10((255^2)/(sigma2));
 
 %% Affichage
 figure(1)
@@ -154,16 +201,16 @@ figure(4)
 imshow(uint8(Iredim_BiL))
 title("IRedim BiL" + L2 + "x" + C2)
 figure(5)
-imshow(uint8(IDecoder))
-title("IDecoder " + nbits + " bits")
+imshow(uint8(IDecoder_QS))
+title("IDecoder QS " + N + " niveau PSNR = " + PSNR_QS)
 figure(6)
 imshow(uint8(IDecoder_DPCM))
-title("IDecoder DPCM " + nbits_DPCM + " bits")
+title("IDecoder DPCM " + N + " niveau PSNR = " + PSNR_DPCM)
 
 
 %% Fonction Q93
-function Icode = Q93(Inormaliser, Delta)
-    global seuils_decision codes niveau_reconstruction
+function Icode = Q93(Inormaliser)
+    global seuils_decision codes
 
     [L, C] = size(Inormaliser);
     Icode = zeros(L, C);
@@ -182,8 +229,8 @@ function Icode = Q93(Inormaliser, Delta)
 end
 
 %% Fonction Q93_1
-function InormQ = Q93_1(Icode, Delta)
-    global seuils_decision codes niveau_reconstruction
+function InormQ = Q93_1(Icode)
+    global codes niveau_reconstruction
 
     [L, C] = size(Icode);
     InormQ = zeros(L, C);

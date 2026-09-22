@@ -94,17 +94,22 @@ else
 end
 
 %% Quantificateur Scalaire (QS)
-m = mean(IsourceMod(:));
-sigma = std(double(IsourceMod(:)));
+m = mean(Iredim_PPV(:));
+sigma = std(double(Iredim_PPV(:)));
 
-Delta = 0.108;
+Bits = [2, 4, 6, 8, 10, 12, 14, 16, 32];
+Delta_vals = [1.732, 0.866, 0.577, 0.433, 0.346, 0.289, 0.247, 0.217, 0.108];
+delta_map = containers.Map(Bits, Delta_vals);
+
 nbits = 5;
+N = 2^nbits;
+Delta = delta_map(N);
 
 [seuils_decision, codes, niveau_reconstruction] = genere_quantif(nbits, Delta);
 
-for l = 1 : L1
-    for c = 1 : C1
-        Inormaliser(l, c) = (IsourceMod(l, c)-m)/sigma;
+for l = 1 : L2
+    for c = 1 : C2
+        Inormaliser(l, c) = (Iredim_PPV(l, c)-m)/sigma;
         Icode(l, c) = Q93(Inormaliser(l,c),Delta);
         InormQ(l, c) = Q93_1(Icode(l, c),Delta);
         IDecoder(l, c) = (InormQ(l, c)*sigma)+m;
@@ -112,31 +117,59 @@ for l = 1 : L1
 end
 
 %% Quantificateur Différentiel (DPCM)
-Delta_DPCM = 8;
-nbits_DPCM = 5;
+Icode_DPCM = zeros(L2, C2);
+IDecoder_DPCM = zeros(L2, C2);
 
-% On régénère les globales avec les paramètres du DPCM
-[seuils_decision, codes, niveau_reconstruction] = genere_quantif(nbits_DPCM, Delta_DPCM);
+for l = 1 : L2
+    for c = 1 : C2
+        % Prédiction
+        if l == 1 && c == 1
+            xpred = 128;
+        elseif l == 1
+            xpred = IDecoder_DPCM(l, c-1);
+        elseif c == 1
+            xpred = IDecoder_DPCM(l-1, c);
+        else
+            p1 = 0.5*IDecoder_DPCM(l-1, c)   + 0.5*IDecoder_DPCM(l, c-1);
+            p2 = 0.5*IDecoder_DPCM(l-1, c-1) + 0.5*IDecoder_DPCM(l, c-1);
+            p3 = 0.5*IDecoder_DPCM(l-1, c-1) + 0.5*IDecoder_DPCM(l-1, c);
+            xpred = median([p1, p2, p3]);
+        end
 
-Icode_DPCM = zeros(L1, C1);
-IDecoder_DPCM = zeros(L1, C1);
+        % Erreur de prédiction
+        erreur_DPCM(l,c) = Iredim_PPV(l, c) - xpred;
+    end
+end
 
-for l = 1 : L1
-    xr_prec = 128;   % prédiction initiale en début de ligne (valeur neutre)
-    for c = 1 : C1
-        x = IsourceMod(l, c);
-        
-        xpred = xr_prec;
-        e = x - xpred;
+m = mean(erreur_DPCM(:));
+sigma = std(double(erreur_DPCM(:)));
+for l = 1 : L2
+    for c = 1 : C2
+        % Prédiction
+        if l == 1 && c == 1
+            xpred = 128;
+        elseif l == 1
+            xpred = IDecoder_DPCM(l, c-1);
+        elseif c == 1
+            xpred = IDecoder_DPCM(l-1, c);
+        else
+            p1 = 0.5*IDecoder_DPCM(l-1, c)   + 0.5*IDecoder_DPCM(l, c-1);
+            p2 = 0.5*IDecoder_DPCM(l-1, c-1) + 0.5*IDecoder_DPCM(l, c-1);
+            p3 = 0.5*IDecoder_DPCM(l-1, c-1) + 0.5*IDecoder_DPCM(l-1, c);
+            xpred = median([p1, p2, p3]);
+        end
 
-        Icode_DPCM(l, c) = Q93(e, Delta_DPCM);
-        eq = Q93_1(Icode_DPCM(l, c), Delta_DPCM);
+        % Erreur de prédiction
+        erreur_ = Iredim_PPV(l, c) - xpred;
 
-        xr = xpred + eq;
-        IDecoder_DPCM(l, c) = xr;
+        I_DPCM = (erreur_DPCM(l,c)-m)/sigma;
 
-        % Mise à jour pour le pixel suivant
-        xr_prec = xr;
+        % Quantification de l'erreur
+        Icode_DPCM = Q93(I_DPCM, Delta);
+        eq = Q93_1(Icode_DPCM, Delta);
+    
+        % Reconstruction
+        IDecoder_DPCM(l, c) = ((xpred+eq)*sigma)/m;
     end
 end
 
@@ -155,10 +188,14 @@ imshow(uint8(Iredim_BiL))
 title("IRedim BiL" + L2 + "x" + C2)
 figure(5)
 imshow(uint8(IDecoder))
-title("IDecoder " + nbits + " bits")
+title("IDecoder " + N + " niveau")
 figure(6)
+subplot(1,2,1)
 imshow(uint8(IDecoder_DPCM))
-title("IDecoder DPCM " + nbits_DPCM + " bits")
+title("IDecoder DPCM " + N + " niveau")
+subplot(1,2,2)
+imshow(uint8(erreur_DPCM))
+title("Erreur DPCM " + N + " niveau")
 
 
 %% Fonction Q93
