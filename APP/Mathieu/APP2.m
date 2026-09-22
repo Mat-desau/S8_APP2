@@ -5,6 +5,11 @@
 clc
 clear all
 close all
+%% test
+format short eng
+tic;
+toc;
+time = toc
 
 %% Variable global
 global seuils_decision codes niveau_reconstruction
@@ -16,13 +21,14 @@ global seuils_decision codes niveau_reconstruction
 % irm = 256x256
 % mandrill = 256x256
 
-
-% Isource = imread("lenna.bmp");
+Isource = imread("lenna.bmp");
 % Isource = imread("cman.tif");
-Isource = imread("irm.tif");
+% Isource = imread("irm.tif");
 % Isource = imread("mandrill.tif");
 % Isource = imread("crest.bmp");
 [L1, C1, Z] = size(Isource);
+
+
 
 if Z == 3
     % Pour avoir le RGB 
@@ -121,6 +127,7 @@ sigma2 = mean((double(Iredim_PPV(:))-double(IDecoder_QS(:))).^2);
 PSNR_QS = 10 * log10((255^2)/(sigma2));
 
 %% Quantificateur Différentiel (DPCM)
+
 Icode_DPCM = zeros(L2, C2);
 
 nbits = 5;
@@ -154,33 +161,35 @@ end
 m = mean(erreur_DPCM(:));
 sigma = std(double(erreur_DPCM(:)));
 
-for l = 1 : L2
-    for c = 1 : C2
-        % Prédiction
-        if l == 1 && c == 1
-            xpred = 128;
-        elseif l == 1
-            xpred = Iredim_PPV(l, c-1);
-        elseif c == 1
-            xpred = Iredim_PPV(l-1, c);
-        else
-            p1 = 0.5*Iredim_PPV(l-1, c)   + 0.5*Iredim_PPV(l, c-1);
-            p2 = 0.5*Iredim_PPV(l-1, c-1) + 0.5*Iredim_PPV(l, c-1);
-            p3 = 0.5*Iredim_PPV(l-1, c-1) + 0.5*Iredim_PPV(l-1, c);
-            xpred = median([p1, p2, p3]);
-        end
-
-        % Erreur de prédiction
-        e = Iredim_PPV(l, c) - xpred;
-
-        I_DPCM = (e-m)/sigma;
-
-        % Quantification de l'erreur
-        Icode_DPCM = Q93(I_DPCM);
-        eq = Q93_1(Icode_DPCM);
+for ii = 1 : 2
+    for l = 1 : L2
+        for c = 1 : C2
+            % Prédiction
+            if l == 1 && c == 1
+                xpred = 128;
+            elseif l == 1
+                xpred = Iredim_PPV(l, c-1);
+            elseif c == 1
+                xpred = Iredim_PPV(l-1, c);
+            else
+                p1 = 0.5*Iredim_PPV(l-1, c)   + 0.5*Iredim_PPV(l, c-1);
+                p2 = 0.5*Iredim_PPV(l-1, c-1) + 0.5*Iredim_PPV(l, c-1);
+                p3 = 0.5*Iredim_PPV(l-1, c-1) + 0.5*Iredim_PPV(l-1, c);
+                xpred = median([p1, p2, p3]);
+            end
     
-        % Reconstruction
-        IDecoder_DPCM(l, c) = ((eq*sigma)+m)+xpred;
+            % Erreur de prédiction
+            e = Iredim_PPV(l, c) - xpred;
+    
+            I_DPCM = (e-m)/sigma;
+    
+            % Quantification de l'erreur
+            Icode_DPCM = Q93(I_DPCM);
+            eq = Q93_1(Icode_DPCM);
+        
+            % Reconstruction
+            IDecoder_DPCM(l, c) = ((eq*sigma)+m)+xpred;
+        end
     end
 end
 
