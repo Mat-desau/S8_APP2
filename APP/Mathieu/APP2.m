@@ -1,65 +1,164 @@
+%% APP2
+% BOIF1302
+% DESM1210
+
 clc
 clear all
 close all
 
-% Loader les images
-Isource = imread("cman.tif");
-[L1, C1, Z1] = size(Isource);
+%% Variable global
+global seuils_decision codes niveau_reconstruction
 
-if Z1 == 3
+%% Problematique
+% Loader les images
+% Lenna = 512x512
+% cman = 256x256
+% irm = 256x256
+% mandrill = 256x256
+
+
+% Isource = imread("lenna.bmp");
+Isource = imread("cman.tif");
+% Isource = imread("irm.tif");
+% Isource = imread("mandrill.tif");
+[L1, C1, Z] = size(Isource);
+
+if Z == 3
     % Pour avoir le RGB 
-    R = Isource(:,:,1);
-    G = Isource(:,:,2);
-    B = Isource(:,:,3);
+    R = double(Isource(:,:,1));
+    G = double(Isource(:,:,2));
+    B = double(Isource(:,:,3));
     % Refaire la modifier en 1 couleur
     IsourceMod = (R+G+B)/3;
 else
-    IsourceMod = Isource;
+    IsourceMod = double(Isource);
 end
 
-%% Redimensionnement
-% Redimension
-Facteur = 2;
-L2 = L1 / Facteur;
-C2 = C1 / Facteur;
-Iredim = zeros(L2, C2);
-
-% FOR pour redimensioner
-for l = 1 : L2-1
-    for c = 1 : C2-1
-        ll = floor(l*L1/L2);
-        cc = floor(c*C1/C2);
-        Iredim(l, c) = IsourceMod(ll, cc);
+%% Redimensionnement PPV
+% Analyse si c'est pas déjà 256
+if L1 > 256 && C1 > 256
+    L2 = 256;
+    C2 = 256;
+    Iredim = zeros(L2, C2);
+    
+    % FOR pour redimensioner
+    for l = 1 : L2
+        for c = 1 : C2
+            ll = floor(l*L1/L2);
+            cc = floor(c*C1/C2);
+            if ll == 0
+                ll = 1;
+            end
+            if cc == 0
+                cc = 1;
+            end
+            Iredim_PPV(l, c) = IsourceMod(ll, cc);
+        end
     end
+else
+    Iredim_PPV = IsourceMod;
+    L2 = L1;
+    C2 = C1;
 end
 
-%% Quantificateur
-m = mean(Isource(:));
-sigma = std(double(Isource(:)));
+%% Redimensionnement Bilineaire
+if L1 > 256 && C1 > 256
+    L2 = 256;
+    C2 = 256;
+    Iredim = zeros(L2, C2);
+    
+    % FOR pour redimensioner
+    for l = 1 : L2-1
+        for c = 1 : C2-1
+            ll = floor(l*L1/L2);
+            cc = floor(c*C1/C2);
+            if ll == 0
+                ll = 1;
+            end
+            if cc == 0
+                cc = 1;
+            end
+            A = IsourceMod(ll, cc);
+            B = IsourceMod(ll, cc+1);
+            C = IsourceMod(ll+1, cc);
+            D = IsourceMod(ll+1, cc+1);
+            X = (1-(c*C1/C2-cc))*A+(c*C1/C2-cc)*B;
+            Y = (1-(c*C1/C2-cc))*C+(c*C1/C2-cc)*D;
+            Iredim_BiL(l, c) = uint8(floor((1-(l*L1/L2-ll))*X+(l*L1/L2-ll)*Y));
+        end
+    end
+else
+    Iredim_BiL = IsourceMod;
+    L2 = L1;
+    C2 = C1;
+end
 
-Delta = 0.433;
-nbits = 3;
+%% Quantificateur Scalaire (QS)
+m = mean(IsourceMod(:));
+sigma = std(double(IsourceMod(:)));
 
-global seuils_decision codes niveau_reconstruction
+Delta = 0.866;
+nbits = 4;
+
 [seuils_decision, codes, niveau_reconstruction] = genere_quantif(nbits, Delta);
 
 for l = 1 : L1
     for c = 1 : C1
-        Inormaliser(l, c) = (double(Isource(l, c))-m)/sigma;
+        Inormaliser(l, c) = (IsourceMod(l, c)-m)/sigma;
         Icode(l, c) = Q93(Inormaliser(l,c),Delta);
         InormQ(l, c) = Q93_1(Icode(l, c),Delta);
         IDecoder(l, c) = (InormQ(l, c)*sigma)+m;
     end
 end
 
+%% Quantificateur Différentiel (DPCM)
+Delta_DPCM = 8;
+nbits_DPCM = 5;
+
+% On régénère les globales avec les paramètres du DPCM
+[seuils_decision, codes, niveau_reconstruction] = genere_quantif(nbits_DPCM, Delta_DPCM);
+
+Icode_DPCM = zeros(L1, C1);
+IDecoder_DPCM = zeros(L1, C1);
+
+for l = 1 : L1
+    xr_prec = 128;   % prédiction initiale en début de ligne (valeur neutre)
+    for c = 1 : C1
+        x = IsourceMod(l, c);
+
+        xpred = xr_prec;
+        e = x - xpred;
+
+        Icode_DPCM(l, c) = Q93(e, Delta_DPCM);
+        eq = Q93_1(Icode_DPCM(l, c), Delta_DPCM);
+
+        xr = xpred + eq;
+        IDecoder_DPCM(l, c) = xr;
+
+        % Mise à jour pour le pixel suivant
+        xr_prec = xr;
+    end
+end
 
 %% Affichage
 figure(1)
 imshow(Isource);
+title("ISource " + L1 + "x" + C1)
 figure(2)
 imshow(uint8(IsourceMod))
+title("ISourceMod " + L1 + "x" + C1)
 figure(3)
+imshow(uint8(Iredim_PPV))
+title("IRedim PPV" + L2 + "x" + C2)
+figure(4)
+imshow(uint8(Iredim_BiL))
+title("IRedim BiL" + L2 + "x" + C2)
+figure(5)
 imshow(uint8(IDecoder))
+title("IDecoder " + nbits + " bits")
+figure(6)
+imshow(uint8(IDecoder_DPCM))
+title("IDecoder DPCM " + nbits_DPCM + " bits")
 
 
 %% Fonction Q93
