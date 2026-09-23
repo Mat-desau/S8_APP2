@@ -7,13 +7,17 @@ clear
 close all
 
 %% Paramètres
-Isource      = "lenna.bmp";   % "cman.tif", "irm.tif", "mandrill.tif", "crest.bmp"
+Isource      = "lenna.bmp"; 
+% Isource      = "cman.tif";
+% Isource      = "irm.tif";
+% Isource      = "mandrill.tif";
+% Isource      = "crest.bmp";
 taille_cible = 256;
 
 nbits_QS   = 5;  
 nbits_DPCM = 5;  
-taille_bloc = 2; 
-nbits_VQ   = 5;
+taille_bloc = [1, 2];   % [hauteur, largeur]
+nbits_VQ   = 10;
 
 Tableau_Delta = [];
 Tableau_PSNR = [];
@@ -27,35 +31,37 @@ Iredim_BiL = redim_bilineaire(IsourceMod, taille_cible);
 
 %% Compression
 % QS
-for Delta_QS = 0:0.01:1
-    [IDecoder_QS,   PSNR_QS]   = compression_QS(Iredim_PPV, nbits_QS, Delta_QS);
+for Delta_QS = 0:0.5:1
+    [~,   PSNR_QS]   = compression_QS(Iredim_PPV, nbits_QS, Delta_QS);
     Tableau_Delta = [Tableau_Delta, Delta_QS];
     Tableau_PSNR = [Tableau_PSNR, PSNR_QS];
 end
-[Value, idx_QS] = max(Tableau_PSNR(:));
-[IDecoder_QS,   PSNR_QS]   = compression_QS(Iredim_PPV, nbits_QS, Tableau_Delta(idx_QS));
+[~, idx_QS] = max(Tableau_PSNR(:));
+Delta_QS = Tableau_Delta(idx_QS);
+[IDecoder_QS,   PSNR_QS]   = compression_QS(Iredim_PPV, nbits_QS, Delta_QS);
 
 % DPCM
 Tableau_Delta = [];
 Tableau_PSNR = [];
-for Delta_DPCM = 0:0.01:1
-    [IDecoder_DPCM, PSNR_DPCM] = compression_DPCM(Iredim_BiL, nbits_DPCM, Delta_DPCM);
+for Delta_DPCM = 0:0.5:1
+    [~, PSNR_DPCM] = compression_DPCM(Iredim_BiL, nbits_DPCM, Delta_DPCM);
     Tableau_Delta = [Tableau_Delta, Delta_DPCM];
     Tableau_PSNR = [Tableau_PSNR, PSNR_DPCM];
 end
-[Value, idx_DPCM] = max(Tableau_PSNR(:));
-[IDecoder_DPCM, PSNR_DPCM] = compression_DPCM(Iredim_BiL, nbits_DPCM, Tableau_Delta(idx_DPCM));
+[~, idx_DPCM] = max(Tableau_PSNR(:));
+Delta_DPCM = Tableau_Delta(idx_DPCM);
+[IDecoder_DPCM, PSNR_DPCM] = compression_DPCM(Iredim_BiL, nbits_DPCM, Delta_DPCM);
 
 % Vectoriel
 [IDecoder_VQ,   PSNR_VQ]   = compression_VQ(Iredim_PPV, taille_bloc, nbits_VQ);
 
 %% Affichage
-afficher_image(1, Isource,       "ISource "    + taille_str(Isource))
-afficher_image(2, IsourceMod,    "ISourceMod " + taille_str(IsourceMod))
-afficher_image(3, Iredim_PPV,    "IRedim PPV " + taille_str(Iredim_PPV))
-afficher_image(4, Iredim_BiL,    "IRedim BiL " + taille_str(Iredim_BiL))
-afficher_image(5, IDecoder_QS,   "IDecoder QS "         + 2^nbits_QS   + " niveaux, PSNR = " + PSNR_QS)
-afficher_image(6, IDecoder_DPCM, "IDecoder DPCM "       + 2^nbits_DPCM + " niveaux, PSNR = " + PSNR_DPCM)
+% afficher_image(1, Isource,       "ISource "    + taille_str(Isource))
+% afficher_image(2, IsourceMod,    "ISourceMod " + taille_str(IsourceMod))
+% afficher_image(3, Iredim_PPV,    "IRedim PPV " + taille_str(Iredim_PPV))
+% afficher_image(4, Iredim_BiL,    "IRedim BiL " + taille_str(Iredim_BiL))
+% afficher_image(5, IDecoder_QS,   "IDecoder QS "         + 2^nbits_QS   + " niveaux, PSNR = " + PSNR_QS)
+% afficher_image(6, IDecoder_DPCM, "IDecoder DPCM "       + 2^nbits_DPCM + " niveaux, PSNR = " + PSNR_DPCM)
 afficher_image(7, IDecoder_VQ,   "IDecoder Vectoriel "  + 2^nbits_VQ   + " codewords, PSNR = " + PSNR_VQ)
 
 
@@ -170,7 +176,7 @@ function [Idec, PSNR] = compression_VQ(I, taille_bloc, nbits)
     [L, C] = size(I);
     M = 2^nbits;
 
-    blocs        = decoupe_blocs(I, taille_bloc);        % 1. découpage
+    blocs        = decoupe_blocs(I, taille_bloc);        % 1. découpage de l'image
     dictionnaire = LBG_splitting(blocs, M);              % 2. dictionnaire
     index        = encode_VQ(blocs, dictionnaire);       % 3. encodage
     blocs_dec    = dictionnaire(:, index);               % 4. décodage
@@ -181,12 +187,12 @@ end
 
 function blocs = decoupe_blocs(I, taille_bloc)
     [L, C] = size(I);
-    nb_blocs = (L/taille_bloc) * (C/taille_bloc);
-    blocs = zeros(taille_bloc^2, nb_blocs);
+    h = taille_bloc(1);  w = taille_bloc(2);
+    blocs = zeros(h*w, (L/h)*(C/w));
     idx = 1;
-    for l = 1 : taille_bloc : L
-        for c = 1 : taille_bloc : C
-            b = I(l:l+taille_bloc-1, c:c+taille_bloc-1);
+    for l = 1 : h : L
+        for c = 1 : w : C
+            b = I(l:l+h-1, c:c+w-1);
             blocs(:, idx) = b(:);
             idx = idx + 1;
         end
@@ -194,11 +200,12 @@ function blocs = decoupe_blocs(I, taille_bloc)
 end
 
 function I = recombine_blocs(blocs, taille_bloc, L, C)
+    h = taille_bloc(1);  w = taille_bloc(2);
     I = zeros(L, C);
     idx = 1;
-    for l = 1 : taille_bloc : L
-        for c = 1 : taille_bloc : C
-            I(l:l+taille_bloc-1, c:c+taille_bloc-1) = reshape(blocs(:, idx), taille_bloc, taille_bloc);
+    for l = 1 : h : L
+        for c = 1 : w : C
+            I(l:l+h-1, c:c+w-1) = reshape(blocs(:, idx), h, w);
             idx = idx + 1;
         end
     end
