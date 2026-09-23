@@ -5,11 +5,6 @@
 clc
 clear all
 close all
-%% test
-format short eng
-tic;
-toc;
-time = toc
 
 %% Variable global
 global seuils_decision codes niveau_reconstruction
@@ -75,15 +70,19 @@ if L1 > 256 && C1 > 256
     Iredim = zeros(L2, C2);
     
     % FOR pour redimensioner
-    for l = 1 : L2-1
-        for c = 1 : C2-1
+    for l = 1 : L2
+        for c = 1 : C2
             ll = floor(l*L1/L2);
             cc = floor(c*C1/C2);
             if ll == 0
                 ll = 1;
+            elseif ll == L1
+                ll = L1-1;
             end
             if cc == 0
                 cc = 1;
+            elseif cc == C1
+                cc = C1-1;
             end
             A = IsourceMod(ll, cc);
             B = IsourceMod(ll, cc+1);
@@ -91,7 +90,7 @@ if L1 > 256 && C1 > 256
             D = IsourceMod(ll+1, cc+1);
             X = (1-(c*C1/C2-cc))*A+(c*C1/C2-cc)*B;
             Y = (1-(c*C1/C2-cc))*C+(c*C1/C2-cc)*D;
-            Iredim_BiL(l, c) = uint8(floor((1-(l*L1/L2-ll))*X+(l*L1/L2-ll)*Y));
+            Iredim_BiL(l, c) = double(floor((1-(l*L1/L2-ll))*X+(l*L1/L2-ll)*Y));
         end
     end
 else
@@ -103,11 +102,6 @@ end
 %% Quantificateur Scalaire (QS)
 m = mean(Iredim_PPV(:));
 sigma = std(double(Iredim_PPV(:)));
-
-% Bits = [2, 4, 6, 8, 10, 12, 14, 16, 32];
-% Delta_vals = [1.414, 1.0873, 0.8707, 0.7309, 0.6334, 0.5613, 0.5055, 0.4609, 0.2799];
-% Delta_vals = [1.596, 0.9957, 0.7334, 0.5860, 0.4908, 0.4238, 0.3739, 0.3352, 0.1881];
-% delta_map = containers.Map(Bits, Delta_vals);
 
 nbits = 5;
 N = 2^nbits;
@@ -124,15 +118,17 @@ for l = 1 : L2
     end
 end
 sigma2 = mean((double(Iredim_PPV(:))-double(IDecoder_QS(:))).^2);
-PSNR_QS = 10 * log10((255^2)/(sigma2));
+PSNR_QS = 10 * log10((max(IDecoder_QS(:))^2)/(sigma2));
 
 %% Quantificateur Différentiel (DPCM)
-
 Icode_DPCM = zeros(L2, C2);
+
+Tableau_Delta = [];
+Tableau_PSNR = [];
 
 nbits = 5;
 N = 2^nbits;
-Delta = 0.2779;
+Delta = 0.46;
 
 [seuils_decision, codes, niveau_reconstruction] = genere_quantif(nbits, Delta);
 
@@ -143,43 +139,43 @@ for l = 1 : L2
         if l == 1 && c == 1
             xpred = 128;
         elseif l == 1
-            xpred = Iredim_PPV(l, c-1);
+            xpred = Iredim_BiL(l, c-1);
         elseif c == 1
-            xpred = Iredim_PPV(l-1, c);
+            xpred = Iredim_BiL(l-1, c);
         else
-            p1 = 0.5*Iredim_PPV(l-1, c)   + 0.5*Iredim_PPV(l, c-1);
-            p2 = 0.5*Iredim_PPV(l-1, c-1) + 0.5*Iredim_PPV(l, c-1);
-            p3 = 0.5*Iredim_PPV(l-1, c-1) + 0.5*Iredim_PPV(l-1, c);
+            p1 = 0.5*Iredim_BiL(l-1, c)   + 0.5*Iredim_BiL(l, c-1);
+            p2 = 0.5*Iredim_BiL(l-1, c-1) + 0.5*Iredim_BiL(l, c-1);
+            p3 = 0.5*Iredim_BiL(l-1, c-1) + 0.5*Iredim_BiL(l-1, c);
             xpred = median([p1, p2, p3]);
         end
 
         % Erreur de prédiction
-        erreur_DPCM(l,c) = Iredim_PPV(l, c) - xpred;
+        erreur_DPCM(l,c) = Iredim_BiL(l, c) - xpred;
     end
 end
 
 m = mean(erreur_DPCM(:));
 sigma = std(double(erreur_DPCM(:)));
 
-for ii = 1 : 2
+for ii = 1 : 1
     for l = 1 : L2
         for c = 1 : C2
             % Prédiction
             if l == 1 && c == 1
                 xpred = 128;
             elseif l == 1
-                xpred = Iredim_PPV(l, c-1);
+                xpred = Iredim_BiL(l, c-1);
             elseif c == 1
-                xpred = Iredim_PPV(l-1, c);
+                xpred = Iredim_BiL(l-1, c);
             else
-                p1 = 0.5*Iredim_PPV(l-1, c)   + 0.5*Iredim_PPV(l, c-1);
-                p2 = 0.5*Iredim_PPV(l-1, c-1) + 0.5*Iredim_PPV(l, c-1);
-                p3 = 0.5*Iredim_PPV(l-1, c-1) + 0.5*Iredim_PPV(l-1, c);
-                xpred = median([p1, p2, p3]);
+                p1 = double(0.5*Iredim_BiL(l-1, c)   + 0.5*Iredim_BiL(l, c-1));
+                p2 = double(0.5*Iredim_BiL(l-1, c-1) + 0.5*Iredim_BiL(l, c-1));
+                p3 = double(0.5*Iredim_BiL(l-1, c-1) + 0.5*Iredim_BiL(l-1, c));
+                xpred = double(median([p1, p2, p3]));
             end
     
             % Erreur de prédiction
-            e = Iredim_PPV(l, c) - xpred;
+            e = Iredim_BiL(l, c) - xpred;
     
             I_DPCM = (e-m)/sigma;
     
@@ -193,8 +189,33 @@ for ii = 1 : 2
     end
 end
 
-sigma2 = mean((double(Iredim_PPV(:))-double(IDecoder_DPCM(:))).^2);
-PSNR_DPCM = 10 * log10((255^2)/(sigma2));
+sigma2 = mean((double(Iredim_BiL(:))-double(IDecoder_DPCM(:))).^2);
+PSNR_DPCM = 10 * log10((max(IDecoder_DPCM(:))^2)/(sigma2));
+
+%% Quantification vectoriel
+taille_bloc = 2;             
+dim = taille_bloc^2;
+nbits_VQ = 5;
+M = 2^nbits_VQ;               
+
+% Étape 1 : découper l'image en blocs (vecteurs colonnes)
+blocs = decoupe_blocs(Iredim_PPV, taille_bloc); 
+
+% Étape 2 : construire le dictionnaire avec LBG + splitting technique
+[dictionnaire, ~] = LBG_splitting(blocs, M);
+
+% Étape 3 : encoder (trouver le codeword le plus proche pour chaque bloc)
+index_VQ = encode_VQ(blocs, dictionnaire);
+
+% Étape 4 : décoder (remplacer chaque bloc par son codeword)
+blocs_decodes = dictionnaire(:, index_VQ);
+
+% Étape 5 : reconstruire l'image
+IDecoder_VQ = recombine_blocs(blocs_decodes, taille_bloc, L2, C2);
+
+% PSNR
+sigma2_VQ = mean((double(Iredim_PPV(:))-double(IDecoder_VQ(:))).^2);
+PSNR_VQ = 10*log10(255^2/sigma2_VQ);
 
 %% Affichage
 figure(1)
@@ -215,21 +236,24 @@ title("IDecoder QS " + N + " niveau PSNR = " + PSNR_QS)
 figure(6)
 imshow(uint8(IDecoder_DPCM))
 title("IDecoder DPCM " + N + " niveau PSNR = " + PSNR_DPCM)
+figure(7)
+imshow(uint8(IDecoder_VQ))
+title("IDecoder Vectoriel " + N + " niveau PSNR = " + PSNR_VQ)
 
 
 %% Fonction Q93
-function Icode = Q93(Inormaliser)
+function Out = Q93(Entree)
     global seuils_decision codes
 
-    [L, C] = size(Inormaliser);
-    Icode = zeros(L, C);
+    [L, C] = size(Entree);
+    Out = zeros(L, C);
 
     for l = 1:L
         for c = 1:C
-            x = Inormaliser(l, c);
+            x = Entree(l, c);
             for i = 1:length(codes)
                 if x > seuils_decision(i) && x <= seuils_decision(i+1)
-                    Icode(l, c) = codes(i);
+                    Out(l, c) = codes(i);
                     break;
                 end
             end
@@ -238,17 +262,17 @@ function Icode = Q93(Inormaliser)
 end
 
 %% Fonction Q93_1
-function InormQ = Q93_1(Icode)
+function Out = Q93_1(Entree)
     global codes niveau_reconstruction
 
-    [L, C] = size(Icode);
-    InormQ = zeros(L, C);
+    [L, C] = size(Entree);
+    Out = zeros(L, C);
 
     for l = 1:L
         for c = 1:C
             for i = 1 : length(codes)
-                if Icode(l,c) == codes(i)
-                    InormQ(l, c) = niveau_reconstruction(i);
+                if Entree(l,c) == codes(i)
+                    Out(l, c) = niveau_reconstruction(i);
                     break;
                 end
             end
@@ -256,7 +280,84 @@ function InormQ = Q93_1(Icode)
     end
 end
 
-%% Generation de quantification
+%% Découper l'image en blocs (vecteurs colonnes)
+function blocs = decoupe_blocs(I, taille_bloc)
+    [L, C] = size(I);
+    blocs = [];
+    for l = 1 : taille_bloc : L
+        for c = 1 : taille_bloc : C
+            b = I(l:l+taille_bloc-1, c:c+taille_bloc-1);
+            blocs = [blocs, b(:)];
+        end
+    end
+end
+
+%% Recombiner les blocs en image
+function I = recombine_blocs(blocs, taille_bloc, L, C)
+    I = zeros(L, C);
+    idx = 1;
+    for l = 1 : taille_bloc : L
+        for c = 1 : taille_bloc : C
+            b = reshape(blocs(:, idx), taille_bloc, taille_bloc);
+            I(l:l+taille_bloc-1, c:c+taille_bloc-1) = b;
+            idx = idx + 1;
+        end
+    end
+end
+
+%% Algorithme LBG avec technique de "splitting" (comme décrit section 10.4.1)
+function [dictionnaire, D_final] = LBG_splitting(training_set, M)
+    epsilon = 0.01;      % perturbation pour le splitting
+    seuil = 1e-3;        % seuil de convergence de la distorsion
+
+    % Étape 0 : codebook à 1 niveau = moyenne de tout l'ensemble
+    dictionnaire = mean(training_set, 2);   % vecteur colonne unique
+
+    while size(dictionnaire, 2) < M
+        % Splitting : dupliquer chaque codeword avec une perturbation +/- epsilon
+        dictionnaire = [dictionnaire.*(1+epsilon), dictionnaire.*(1-epsilon)];
+
+        % Affiner ce nouveau codebook avec LBG jusqu'à convergence
+        D_prec = inf;
+        while true
+            % Assignation : trouver le codeword le plus proche pour chaque vecteur
+            [index, D] = encode_VQ(training_set, dictionnaire);
+
+            % Mise à jour : chaque codeword = centroïde de sa région
+            for i = 1 : size(dictionnaire, 2)
+                membres = training_set(:, index == i);
+                if ~isempty(membres)
+                    dictionnaire(:, i) = mean(membres, 2);
+                end
+                % Gestion "empty cell" (section 10.4.2) : si aucun vecteur assigné,
+                % on garde le codeword tel quel (ou on pourrait le réinitialiser)
+            end
+
+            if abs(D_prec - D)/D < seuil
+                break;
+            end
+            D_prec = D;
+        end
+    end
+    D_final = D_prec;
+end
+
+%% Encoder : trouver l'index du codeword le plus proche pour chaque vecteur
+function [index, D] = encode_VQ(vecteurs, dictionnaire)
+    n = size(vecteurs, 2);
+    M = size(dictionnaire, 2);
+    index = zeros(1, n);
+    dist_totale = 0;
+
+    for k = 1 : n
+        distances = sum((dictionnaire - vecteurs(:,k)).^2, 1);   % distance euclidienne² à chaque codeword
+        [d_min, i_min] = min(distances);
+        index(k) = i_min;
+        dist_totale = dist_totale + d_min;
+    end
+    D = dist_totale / n;
+end
+%% Fonction generation de quantification
 function [seuils_decision, codes, niveau_reconstruction] = genere_quantif(nbits, Delta)
     N = 2^nbits;  % nombre de niveaux, ex: 8 pour nbits=3
     codes = 0:(N-1);
@@ -266,3 +367,4 @@ function [seuils_decision, codes, niveau_reconstruction] = genere_quantif(nbits,
 
     niveau_reconstruction = ((-N+1):2:(N-1)) * Delta/2;
 end
+
