@@ -7,12 +7,16 @@ clear
 close all
 
 %% Paramètres
-Isource      = "lenna.bmp";   % "cman.tif", "irm.tif", "mandrill.tif", "crest.bmp"
+Isource      = "lenna.bmp"; 
+% Isource      = "cman.tif";
+% Isource      = "irm.tif";
+% Isource      = "mandrill.tif";
+% Isource      = "crest.bmp";
 taille_cible = 256;
 
 nbits_QS   = 5;  
 nbits_DPCM = 5;  
-taille_bloc = [1, 2];   % [hauteur, largeur]
+taille_bloc = [2, 1];   % [hauteur, largeur]
 nbits_VQ   = 10;
 
 Tableau_Delta = [];
@@ -27,29 +31,29 @@ Iredim_BiL = redim_bilineaire(IsourceMod, taille_cible);
 
 %% Compression
 % QS
-for Delta_QS = 0:0.5:1
-    [~,   PSNR_QS]   = compression_QS(Iredim_PPV, nbits_QS, Delta_QS);
-    Tableau_Delta = [Tableau_Delta, Delta_QS];
-    Tableau_PSNR = [Tableau_PSNR, PSNR_QS];
-end
-[~, idx_QS] = max(Tableau_PSNR(:));
-Delta_QS = Tableau_Delta(idx_QS);
-[IDecoder_QS,   PSNR_QS]   = compression_QS(Iredim_PPV, nbits_QS, Delta_QS);
-
-% DPCM
-Tableau_Delta = [];
-Tableau_PSNR = [];
-for Delta_DPCM = 0:0.5:1
-    [~, PSNR_DPCM] = compression_DPCM(Iredim_BiL, nbits_DPCM, Delta_DPCM);
-    Tableau_Delta = [Tableau_Delta, Delta_DPCM];
-    Tableau_PSNR = [Tableau_PSNR, PSNR_DPCM];
-end
-[~, idx_DPCM] = max(Tableau_PSNR(:));
-Delta_DPCM = Tableau_Delta(idx_DPCM);
-[IDecoder_DPCM, PSNR_DPCM] = compression_DPCM(Iredim_BiL, nbits_DPCM, Delta_DPCM);
+% for Delta_QS = 0:0.5:1
+%     [~,   PSNR_QS]   = compression_QS(Iredim_PPV, nbits_QS, Delta_QS);
+%     Tableau_Delta = [Tableau_Delta, Delta_QS];
+%     Tableau_PSNR = [Tableau_PSNR, PSNR_QS];
+% end
+% [~, idx_QS] = max(Tableau_PSNR(:));
+% Delta_QS = Tableau_Delta(idx_QS);
+% [IDecoder_QS,   PSNR_QS]   = compression_QS(Iredim_PPV, nbits_QS, Delta_QS);
+% 
+% % DPCM
+% Tableau_Delta = [];
+% Tableau_PSNR = [];
+% for Delta_DPCM = 0:0.5:1
+%     [~, PSNR_DPCM] = compression_DPCM(Iredim_BiL, nbits_DPCM, Delta_DPCM);
+%     Tableau_Delta = [Tableau_Delta, Delta_DPCM];
+%     Tableau_PSNR = [Tableau_PSNR, PSNR_DPCM];
+% end
+% [~, idx_DPCM] = max(Tableau_PSNR(:));
+% Delta_DPCM = Tableau_Delta(idx_DPCM);
+% [IDecoder_DPCM, PSNR_DPCM] = compression_DPCM(Iredim_BiL, nbits_DPCM, Delta_DPCM);
 
 % Vectoriel
-[IDecoder_VQ,   PSNR_VQ]   = compression_VQ(Iredim_PPV, taille_bloc, nbits_VQ);
+[IDecoder_VQ,   PSNR_VQ]   = compression_VQ(Iredim_BiL, taille_bloc, nbits_VQ);
 
 %% Affichage
 % afficher_image(1, Isource,       "ISource "    + taille_str(Isource))
@@ -58,7 +62,7 @@ Delta_DPCM = Tableau_Delta(idx_DPCM);
 % afficher_image(4, Iredim_BiL,    "IRedim BiL " + taille_str(Iredim_BiL))
 % afficher_image(5, IDecoder_QS,   "IDecoder QS "         + 2^nbits_QS   + " niveaux, PSNR = " + PSNR_QS)
 % afficher_image(6, IDecoder_DPCM, "IDecoder DPCM "       + 2^nbits_DPCM + " niveaux, PSNR = " + PSNR_DPCM)
-%afficher_image(7, IDecoder_VQ,   "IDecoder Vectoriel "  + 2^nbits_VQ   + " codewords, PSNR = " + PSNR_VQ)
+afficher_image(7, IDecoder_VQ,   "IDecoder Vectoriel "  + 2^nbits_VQ   + " codewords, PSNR = " + PSNR_VQ)
 
 
 %% ======================================================================
@@ -172,7 +176,7 @@ function [Idec, PSNR] = compression_VQ(I, taille_bloc, nbits)
     [L, C] = size(I);
     M = 2^nbits;
 
-    blocs        = decoupe_blocs(I, taille_bloc);        % 1. découpage
+    blocs        = decoupe_blocs(I, taille_bloc);        % 1. découpage de l'image
     dictionnaire = LBG_splitting(blocs, M);              % 2. dictionnaire
     index        = encode_VQ(blocs, dictionnaire);       % 3. encodage
     blocs_dec    = dictionnaire(:, index);               % 4. décodage
@@ -207,7 +211,7 @@ function I = recombine_blocs(blocs, taille_bloc, L, C)
     end
 end
 
-% LBG avec splitting (section 10.4.1)
+% LBG avec splitting 
 function [dictionnaire, D] = LBG_splitting(training_set, M)
     epsilon = 0.01;   % perturbation pour le splitting
     seuil   = 1e-3;   % seuil de convergence
@@ -220,7 +224,7 @@ function [dictionnaire, D] = LBG_splitting(training_set, M)
             [index, D] = encode_VQ(training_set, dictionnaire);
             for i = 1 : size(dictionnaire, 2)
                 membres = training_set(:, index == i);
-                if ~isempty(membres)          % "empty cell" (10.4.2) : on garde le codeword
+                if ~isempty(membres)
                     dictionnaire(:, i) = mean(membres, 2);
                 end
             end
@@ -236,14 +240,18 @@ function [index, D] = encode_VQ(vecteurs, dictionnaire)
     n = size(vecteurs, 2);
     index = zeros(1, n);
     dist_totale = 0;
-    for k = 1 : n
-        distances = sum((dictionnaire - vecteurs(:, k)).^2, 1);
-        [d_min, index(k)] = min(distances);
-        dist_totale = dist_totale + d_min;
+    norme_c = sum(dictionnaire.^2, 1)';            % M x 1
+    taille_paquet = 4096;
+
+    for debut = 1 : taille_paquet : n
+        fin = min(debut + taille_paquet - 1, n);
+        X = vecteurs(:, debut:fin);                % dim x p
+        dist = norme_c - 2 * (dictionnaire' * X);  % M x p (sans ||x||^2)
+        [dmin, index(debut:fin)] = min(dist, [], 1);
+        dist_totale = dist_totale + sum(dmin + sum(X.^2, 1));
     end
     D = dist_totale / n;
 end
-
 %% --- Quantificateur (sans variables globales) --------------------------
 function Q = genere_quantif(nbits, Delta)
     N = 2^nbits;

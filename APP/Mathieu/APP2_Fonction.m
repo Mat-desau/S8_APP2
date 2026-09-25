@@ -16,8 +16,9 @@ taille_cible = 256;
 
 nbits_QS   = 5;  
 nbits_DPCM = 5;  
-taille_bloc = [1, 2];   % [hauteur, largeur]
-nbits_VQ   = 10;
+taille_bloc = [2, 1];   % [hauteur, largeur]
+nbits_VQ   = 9;
+taille_bloc_BTC = [2, 2];   % [hauteur, largeur]
 
 Tableau_Delta = [];
 Tableau_PSNR = [];
@@ -30,30 +31,58 @@ Iredim_PPV = redim_PPV(IsourceMod, taille_cible);
 Iredim_BiL = redim_bilineaire(IsourceMod, taille_cible);
 
 %% Compression
-% QS
-for Delta_QS = 0:0.5:1
-    [~,   PSNR_QS]   = compression_QS(Iredim_PPV, nbits_QS, Delta_QS);
-    Tableau_Delta = [Tableau_Delta, Delta_QS];
-    Tableau_PSNR = [Tableau_PSNR, PSNR_QS];
-end
-[~, idx_QS] = max(Tableau_PSNR(:));
-Delta_QS = Tableau_Delta(idx_QS);
-[IDecoder_QS,   PSNR_QS]   = compression_QS(Iredim_PPV, nbits_QS, Delta_QS);
-
-% DPCM
-Tableau_Delta = [];
-Tableau_PSNR = [];
-for Delta_DPCM = 0:0.5:1
-    [~, PSNR_DPCM] = compression_DPCM(Iredim_BiL, nbits_DPCM, Delta_DPCM);
-    Tableau_Delta = [Tableau_Delta, Delta_DPCM];
-    Tableau_PSNR = [Tableau_PSNR, PSNR_DPCM];
-end
-[~, idx_DPCM] = max(Tableau_PSNR(:));
-Delta_DPCM = Tableau_Delta(idx_DPCM);
-[IDecoder_DPCM, PSNR_DPCM] = compression_DPCM(Iredim_BiL, nbits_DPCM, Delta_DPCM);
+% % QS
+% for Delta_QS = 0:0.01:1
+%     [~,   PSNR_QS]   = compression_QS(Iredim_PPV, nbits_QS, Delta_QS);
+%     Tableau_Delta = [Tableau_Delta, Delta_QS];
+%     Tableau_PSNR = [Tableau_PSNR, PSNR_QS];
+% end
+% [~, idx_QS] = max(Tableau_PSNR(:));
+% Delta_QS = Tableau_Delta(idx_QS);
+% [IDecoder_QS,   PSNR_QS]   = compression_QS(Iredim_PPV, nbits_QS, Delta_QS);
+% 
+% % DPCM
+% Tableau_Delta = [];
+% Tableau_PSNR = [];
+% for Delta_DPCM = 0:0.01:1
+%     [~, PSNR_DPCM] = compression_DPCM(Iredim_BiL, nbits_DPCM, Delta_DPCM);
+%     Tableau_Delta = [Tableau_Delta, Delta_DPCM];
+%     Tableau_PSNR = [Tableau_PSNR, PSNR_DPCM];
+% end
+% [~, idx_DPCM] = max(Tableau_PSNR(:));
+% Delta_DPCM = Tableau_Delta(idx_DPCM);
+% [IDecoder_DPCM, PSNR_DPCM] = compression_DPCM(Iredim_BiL, nbits_DPCM, Delta_DPCM);
 
 % Vectoriel
-[IDecoder_VQ,   PSNR_VQ]   = compression_VQ(Iredim_PPV, taille_bloc, nbits_VQ);
+[IDecoder_VQ,   PSNR_VQ]   = compression_VQ(Iredim_BiL, taille_bloc, nbits_VQ);
+
+% BTC
+[IDecoder_BTC,  PSNR_BTC, bits_donnees_BTC, bits_meta_BTC] = compression_BTC(Iredim_BiL, taille_bloc_BTC);
+
+%% Débits
+nb_pixels  = numel(Iredim_BiL);
+bits_float = 32;
+
+% QS et DPCM : un code par pixel + m, sigma, Delta
+bits_donnees_QS   = nb_pixels * nbits_QS;
+bits_meta_QS      = 3 * bits_float;
+bits_donnees_DPCM = nb_pixels * nbits_DPCM;
+bits_meta_DPCM    = 3 * bits_float;
+
+% VQ : un indice par bloc + le dictionnaire
+h = taille_bloc(1);  w = taille_bloc(2);
+M = 2^nbits_VQ;
+nb_blocs        = nb_pixels / (h*w);
+bits_donnees_VQ = nb_blocs * nbits_VQ;
+bits_meta_VQ    = M * h * w * 8;          % codewords arrondis sur 8 bits
+
+% BTC : bits_donnees_BTC et bits_meta_BTC sont calculés dans compression_BTC
+h_BTC = taille_bloc_BTC(1);  w_BTC = taille_bloc_BTC(2);   % pour le titre
+
+afficher_debit("QS",   bits_donnees_QS,   bits_meta_QS,   nb_pixels)
+afficher_debit("DPCM", bits_donnees_DPCM, bits_meta_DPCM, nb_pixels)
+afficher_debit("VQ",   bits_donnees_VQ,   bits_meta_VQ,   nb_pixels)
+afficher_debit("BTC",  bits_donnees_BTC,  bits_meta_BTC,  nb_pixels)
 
 %% Affichage
 % afficher_image(1, Isource,       "ISource "    + taille_str(Isource))
@@ -62,7 +91,8 @@ Delta_DPCM = Tableau_Delta(idx_DPCM);
 % afficher_image(4, Iredim_BiL,    "IRedim BiL " + taille_str(Iredim_BiL))
 % afficher_image(5, IDecoder_QS,   "IDecoder QS "         + 2^nbits_QS   + " niveaux, PSNR = " + PSNR_QS)
 % afficher_image(6, IDecoder_DPCM, "IDecoder DPCM "       + 2^nbits_DPCM + " niveaux, PSNR = " + PSNR_DPCM)
-afficher_image(7, IDecoder_VQ,   "IDecoder Vectoriel "  + 2^nbits_VQ   + " codewords, PSNR = " + PSNR_VQ)
+% afficher_image(7, IDecoder_VQ,   "IDecoder Vectoriel "  + 2^nbits_VQ   + " codewords, PSNR = " + PSNR_VQ)
+afficher_image(8, IDecoder_BTC,  "IDecoder BTC " + h_BTC + "x" + w_BTC + ", PSNR = " + PSNR_BTC)
 
 
 %% ======================================================================
@@ -182,7 +212,7 @@ function [Idec, PSNR] = compression_VQ(I, taille_bloc, nbits)
     blocs_dec    = dictionnaire(:, index);               % 4. décodage
     Idec = recombine_blocs(blocs_dec, taille_bloc, L, C);% 5. reconstruction
 
-    PSNR = calcul_PSNR(I, Idec);
+    PSNR = calcul_PSNR(I, Idec, max(Idec(:)));
 end
 
 function blocs = decoupe_blocs(I, taille_bloc)
@@ -211,7 +241,7 @@ function I = recombine_blocs(blocs, taille_bloc, L, C)
     end
 end
 
-% LBG avec splitting (section 10.4.1)
+% LBG avec splitting 
 function [dictionnaire, D] = LBG_splitting(training_set, M)
     epsilon = 0.01;   % perturbation pour le splitting
     seuil   = 1e-3;   % seuil de convergence
@@ -224,7 +254,7 @@ function [dictionnaire, D] = LBG_splitting(training_set, M)
             [index, D] = encode_VQ(training_set, dictionnaire);
             for i = 1 : size(dictionnaire, 2)
                 membres = training_set(:, index == i);
-                if ~isempty(membres)          % "empty cell" (10.4.2) : on garde le codeword
+                if ~isempty(membres)
                     dictionnaire(:, i) = mean(membres, 2);
                 end
             end
@@ -240,12 +270,62 @@ function [index, D] = encode_VQ(vecteurs, dictionnaire)
     n = size(vecteurs, 2);
     index = zeros(1, n);
     dist_totale = 0;
-    for k = 1 : n
-        distances = sum((dictionnaire - vecteurs(:, k)).^2, 1);
-        [d_min, index(k)] = min(distances);
-        dist_totale = dist_totale + d_min;
+    norme_c = sum(dictionnaire.^2, 1)';            % M x 1
+    taille_paquet = 4096;
+
+    for debut = 1 : taille_paquet : n
+        fin = min(debut + taille_paquet - 1, n);
+        X = vecteurs(:, debut:fin);                % dim x p
+        dist = norme_c - 2 * (dictionnaire' * X);  % M x p (sans ||x||^2)
+        [dmin, index(debut:fin)] = min(dist, [], 1);
+        dist_totale = dist_totale + sum(dmin + sum(X.^2, 1));
     end
     D = dist_totale / n;
+end
+
+%% --- BTC ---------------------------------------------------------------
+function [Idec, PSNR, bits_donnees, bits_meta] = compression_BTC(I, taille_bloc)
+    nbits_niveau = 7;                          % bits pour coder a et b
+    bits_entete  = 3 * 16;                     % L, C, n sur 16 bits
+
+    [L, C] = size(I);
+    blocs = decoupe_blocs(I, taille_bloc);     % (h*w) x nb_blocs
+    m = size(blocs, 1);                        % nb de pixels par bloc
+    nb_blocs = size(blocs, 2);
+
+    % --- Encodeur ---
+    % Bitmap : 1 si le pixel est >= à la moyenne du bloc
+    moy    = mean(blocs, 1);
+    bitmap = blocs >= moy;
+    q      = sum(bitmap, 1);                   % nb de pixels "hauts"
+
+    % Les 2 niveaux : moyenne des pixels bas (a) et des pixels hauts (b)
+    a = sum(blocs .* ~bitmap, 1) ./ (m - q);
+    b = sum(blocs .*  bitmap, 1) ./ q;
+    uniforme = (q == m);                       % bloc plat : tout = moyenne
+    a(uniforme) = moy(uniforme);
+    b(uniforme) = moy(uniforme);
+
+    % Quantification de a et b sur nbits_niveau bits : c'est ce qu'on transmet
+    pas     = 256 / 2^nbits_niveau;            % 7 bits -> pas de 2
+    val_max = 2^nbits_niveau - 1;              % 7 bits -> 127
+    a_val = min(floor(a / pas), val_max);
+    b_val = min(floor(b / pas), val_max);
+
+    % --- Décodeur ---
+    % Retour à l'échelle 0-255 (centre de l'intervalle)
+    a = a_val * pas + (pas - 1)/2;
+    b = b_val * pas + (pas - 1)/2;
+
+    blocs_dec = a .* ~bitmap + b .* bitmap;
+    Idec = recombine_blocs(blocs_dec, taille_bloc, L, C);
+    Idec = min(max(Idec, 0), 255);             % rester dans [0, 255]
+
+    PSNR = calcul_PSNR(I, Idec);
+
+    % --- Débit : calculé à partir de ce qui est réellement transmis ---
+    bits_donnees = numel(bitmap);                            % 1 bit par pixel
+    bits_meta    = nb_blocs * 2 * nbits_niveau + bits_entete; % a, b + en-tête
 end
 
 %% --- Quantificateur (sans variables globales) --------------------------
@@ -294,4 +374,12 @@ end
 
 function s = taille_str(I)
     s = size(I,1) + "x" + size(I,2);
+end
+
+function afficher_debit(nom, bits_donnees, bits_meta, nb_pixels)
+    bpp_d = bits_donnees / nb_pixels;
+    bpp_m = bits_meta    / nb_pixels;
+    total = bpp_d + bpp_m;
+    fprintf("%-5s : données = %.4f bpp | méta = %.4f bpp | total = %.4f bpp | taux = %.2f:1\n", ...
+            nom, bpp_d, bpp_m, total, 8/total);
 end
