@@ -1,0 +1,319 @@
+% APP2
+% BOIF1302
+% DESM1210
+%% Load and clear
+
+clc; clear all; close all;
+Isource = imread("lenna.bmp");
+
+%% Problematique
+clc; close all;
+
+tic
+L = 256;
+C = 256;
+nbits = 5;
+N = 2^nbits;
+
+Iformat = formattageBiLin(Isource, L, C);
+
+Ivect = vectorielle(Iformat, nbits);
+
+Ibtc = btc(Iformat, 2, 2);
+
+[Idpcm, e] = DPCM(Iformat,N);
+
+[Inorm, m, sigma] = normal(Iformat);
+
+Iencode = Q93encoder(Inorm, N);
+
+Idecode = Q93decoder(Iencode, N);
+
+Idenorm = denormal(Idecode, m, sigma);
+
+% Calcul PSNR
+PSNR_Quant = PSNR(Iformat, Idenorm);
+PSNR_DPCM = PSNR(Iformat, Idpcm);
+PSNR_VECT = PSNR(Iformat, Ivect);
+PSNR_BTC = PSNR(Iformat, Ibtc);
+
+% Affichage QUANT
+figure;
+subplot(1,2,1);
+imshow(uint8(Isource));
+title("Im Source");
+
+subplot(1,2,2);
+imshow(uint8(Idenorm));
+title(sprintf('Im Quant - PSNR : %.2f dB', PSNR_Quant));
+
+% Affichage DPCM
+figure;
+subplot(1,2,1);
+imshow(uint8(Isource));
+title("Im Source");
+
+subplot(1,2,2);
+imshow(uint8(Idpcm));
+title(sprintf('Im DPCM - PSNR : %.2f dB', PSNR_DPCM));
+
+% Affichage VECT
+figure;
+subplot(1,2,1);
+imshow(uint8(Isource));
+title("Im Source");
+
+subplot(1,2,2);
+imshow(uint8(Ivect));
+title(sprintf('Im Vect - PSNR : %.2f dB', PSNR_VECT));
+
+% Affichage BTC
+figure;
+subplot(1,2,1);
+imshow(uint8(Isource));
+title("Im Source");
+
+subplot(1,2,2);
+imshow(uint8(Ivect));
+title(sprintf('Im BTC - PSNR : %.2f dB', PSNR_BTC));
+
+toc
+%% Fonctions
+
+function PSNR = PSNR(Isource, Imod)
+    sigma2 = mean((double(Isource(:)) - double(Imod(:))).^2);
+    PSNR = 10 * log10(max(double(Isource(:)))^2 / sigma2);
+end
+
+function Iformat = formattagePPV(Isource, L, C)
+    [L1, C1, Z1] = size(Isource);
+    if Z1 == 3
+        R = double(Isource(:,:,1));
+        G = double(Isource(:,:,2));
+        B = double(Isource(:,:,3));
+        Iint = (R+G+B)/3;
+    else
+        Iint = double(Isource);
+    end
+  
+    Iformat = zeros(L,C);
+
+    for l=1 : L
+        for c=1 : C
+            ll = floor(l*L1/L);
+            cc = floor(c*C1/C);
+            Iformat(l,c) = Iint(ll,cc);
+        end
+    end
+end
+
+function Iformat = formattageBiLin(Isource, L2, C2)
+    [L1, C1, Z1] = size(Isource);
+    if Z1 == 3
+        R = double(Isource(:,:,1));
+        G = double(Isource(:,:,2));
+        B = double(Isource(:,:,3));
+        Iint = (R+G+B)/3;
+    else
+        Iint = double(Isource);
+    end
+    
+    Iformat = zeros(L2, C2);
+    
+    for l = 1:L2
+        for c = 1:C2
+            
+            r = (l - 0.5) * L1 / L2 + 0.5;
+            k = (c - 0.5) * C1 / C2 + 0.5;
+            
+            ll = floor(r);
+            cc = floor(k);
+            
+            ll = max(1, min(ll, L1 - 1));
+            cc = max(1, min(cc, C1 - 1));
+            
+            dl = r - ll;
+            dc = k - cc;
+            
+            A = Iint(ll,   cc);
+            B = Iint(ll,   cc+1);
+            C = Iint(ll+1, cc);
+            D = Iint(ll+1, cc+1);
+            
+            X = (1 - dc) * A + dc * B;
+            Y = (1 - dc) * C + dc * D;
+            Iformat(l, c) = floor((1 - dl) * X + dl * Y);
+        end
+    end 
+end
+
+function [Inorm, m, sigma] = normal(Image)
+    
+    m = mean(Image(:));
+    sigma = std(double(Image(:)));
+
+    Inorm = (double(Image)-m)/sigma;
+end
+
+function Idenorm = denormal(Image, m, sigma)
+
+    Idenorm = (Image*sigma)+m;
+end
+
+function p = pix_dpcm(p_pred, L, C)
+    if L == 1 && C == 1
+        p = 128;
+    elseif L == 1
+        p = p_pred(1, C-1);
+    elseif C == 1
+        p = p_pred(L-1, 1);
+    else
+        p1 = 0.5*p_pred(L-1,C) + 0.5*p_pred(L,C-1);
+        p2 = 0.5*p_pred(L-1,C-1) + 0.5*p_pred(L,C-1);
+        p3 = 0.5*p_pred(L-1,C-1) + 0.5*p_pred(L-1,C);
+
+        p = median([p1,p2,p3]);
+    end
+end
+
+function Iencode = Q93encoder(Inorm, N)
+
+    nbits_dict = [2; 4; 6; 8; 10; 12; 14; 16; 32];
+    delta_dict = [1.732; 0.866; 0.577; 0.433; 0.346; 0.289; 0.247; 0.217; 0.108];
+    uni = dictionary(nbits_dict, delta_dict);
+
+    delta = uni(N);
+
+    seuils_int = ((-N/2+1):(N/2-1))*delta;
+    seuils = [-inf, seuils_int, inf];
+    codes = 0:(N-1);
+
+    [L,C] = size(Inorm);
+    Iencode = zeros(L,C);
+
+    for l = 1:L
+        for c = 1:C
+            x = Inorm(l,c);
+            for i = 1:N
+                if x > seuils(i) && x <= seuils(i+1)
+                    Iencode(l,c) = codes(i);
+                    break;
+                end
+            end
+        end
+    end
+end
+
+function Idecode = Q93decoder(Iencode, N)
+
+    nbits_dict = [2; 4; 6; 8; 10; 12; 14; 16; 32];
+    delta_dict = [1.732; 0.866; 0.577; 0.433; 0.346; 0.289; 0.247; 0.217; 0.108];
+    uni = dictionary(nbits_dict, delta_dict);
+
+    delta = uni(N);
+    
+    seuils = ((-N+1):2:(N-1))*delta/2;
+    codes = 0:(N-1);
+
+    [L,C] = size(Iencode);
+    Idecode = zeros(L,C);
+
+    for l = 1:L
+        for c = 1:C 
+            for i = 1:N
+                if Iencode(l,c) == codes(i)
+                    Idecode(l,c) = seuils(i);
+                    break;
+                end
+            end
+        end
+    end
+end
+
+function [Idpcm, e, e_hat] = DPCM(Image, N)
+
+    [L, C, Z] = size(Image);
+    
+    Idpcm = zeros(L, C);
+    e = zeros(L, C);
+    e_hat = zeros(L, C);
+ 
+    nbits_dict = [2; 4; 6; 8; 10; 12; 14; 16; 32];
+    delta_dict = [1.414; 1.0873; 0.8707; 0.7309; 0.6334; 0.5613; 0.5055; 0.4609; 0.2799];
+    Laplacien = dictionary(nbits_dict, delta_dict);
+
+    delta = Laplacien(N);
+
+    sigma_e = std(Image(:)); 
+    step_size = delta * sigma_e;
+    
+    max_idx = (N / 2) - 1;
+    min_idx = -(N / 2);
+
+    for l = 1:L
+        for c = 1:C
+            p = pix_dpcm(Idpcm, l, c);
+            
+            e(l,c) = Image(l,c) - p;
+            
+            e_quant_idx = round(e(l,c) / step_size);
+            
+            e_quant_idx = min(max(e_quant_idx, min_idx), max_idx);
+            
+            e_hat(l,c) = e_quant_idx * step_size;
+            
+            Idpcm(l,c) = min(max(p + e_hat(l,c), 0), 255);
+        end
+    end
+end
+
+function Ivect = vectorielle(Image, nbits)
+
+    K = 2^(2*nbits);
+
+    [L, C, Z] = size(Image);
+
+    vecteurs = im2col(Image, [1, 2], 'distinct')';
+
+    opts = statset('MaxIter', 100);
+    [i, dict] = kmeans(vecteurs, K, 'Options', opts, 'Replicates', 1);
+
+    vecteurs_reconstruits = dict(i, :);
+    Ivect = col2im(vecteurs_reconstruits', [1, 2], [L, C], 'distinct');
+end
+
+function Ibtc = btc(Image, l, c)
+
+
+    [L, C] = size(Image);
+    Ibtc = zeros(L, C);
+    m = l * c;
+    
+    for i = 1 : l : L
+        for j = 1 : c : C
+
+            bloc = Image(i : i + l - 1, j : j + c - 1);
+            
+            mu = mean(bloc(:));
+            sigma = std(bloc(:));
+            
+            masque = (bloc >= mu);
+            q = sum(masque(:));
+            
+            if q == 0 || q == m
+                a = mu;
+                b = mu;
+            else
+                a = mu - sigma * sqrt(q / (m - q));
+                b = mu + sigma * sqrt((m - q) / q);
+            end
+            
+            bloc_reconstruit = zeros(l, c);
+            bloc_reconstruit(masque) = b;     
+            bloc_reconstruit(~masque) = a;    
+            
+            Ibtc(i : i + l - 1, j : j + c - 1) = bloc_reconstruit;
+            
+        end
+    end
+end
