@@ -39,8 +39,9 @@ Iredim_BiL = redim_bilineaire(IsourceMod, taille_cible);
 % end
 % [~, idx_QS] = max(Tableau_PSNR(:));
 % Delta_QS = Tableau_Delta(idx_QS);
+% % Delta_QS = 5; % à décommenter pour sauter for et mettre haut commentaire
 % [IDecoder_QS,   PSNR_QS]   = compression_QS(Iredim_PPV, nbits_QS, Delta_QS);
-% 
+
 % % DPCM
 % Tableau_Delta = [];
 % Tableau_PSNR = [];
@@ -51,7 +52,8 @@ Iredim_BiL = redim_bilineaire(IsourceMod, taille_cible);
 % end
 % [~, idx_DPCM] = max(Tableau_PSNR(:));
 % Delta_DPCM = Tableau_Delta(idx_DPCM);
-% [IDecoder_DPCM, PSNR_DPCM] = compression_DPCM(Iredim_BiL, nbits_DPCM, Delta_DPCM);
+Delta_DPCM = 0.13; % à décommenter pour sauter for et mettre haut commentaire
+[IDecoder_DPCM, PSNR_DPCM] = compression_DPCM(Iredim_BiL, nbits_DPCM, Delta_DPCM);
 
 % Vectoriel
 [IDecoder_VQ,   PSNR_VQ]   = compression_VQ(Iredim_BiL, taille_bloc, nbits_VQ);
@@ -90,9 +92,9 @@ afficher_debit("BTC",  bits_donnees_BTC,  bits_meta_BTC,  nb_pixels)
 % afficher_image(3, Iredim_PPV,    "IRedim PPV " + taille_str(Iredim_PPV))
 % afficher_image(4, Iredim_BiL,    "IRedim BiL " + taille_str(Iredim_BiL))
 % afficher_image(5, IDecoder_QS,   "IDecoder QS "         + 2^nbits_QS   + " niveaux, PSNR = " + PSNR_QS)
-% afficher_image(6, IDecoder_DPCM, "IDecoder DPCM "       + 2^nbits_DPCM + " niveaux, PSNR = " + PSNR_DPCM)
+afficher_image(6, IDecoder_DPCM, "IDecoder DPCM "       + 2^nbits_DPCM + " niveaux, PSNR = " + PSNR_DPCM)
 % afficher_image(7, IDecoder_VQ,   "IDecoder Vectoriel "  + 2^nbits_VQ   + " codewords, PSNR = " + PSNR_VQ)
-afficher_image(8, IDecoder_BTC,  "IDecoder BTC " + h_BTC + "x" + w_BTC + ", PSNR = " + PSNR_BTC)
+% afficher_image(8, IDecoder_BTC,  "IDecoder BTC " + h_BTC + "x" + w_BTC + ", PSNR = " + PSNR_BTC)
 
 
 %% ======================================================================
@@ -170,9 +172,11 @@ function [Idec, PSNR] = compression_DPCM(I, nbits, Delta)
 
     % Prédiction et erreur de prédiction
     xpred = zeros(L, C);
+    Idec = zeros(L, C);
+
     for l = 1 : L
         for c = 1 : C
-            xpred(l, c) = predire_pixel(I, l, c);
+            xpred(l, c) = predire_pixel(Idec, l, c);
         end
     end
     erreur = I - xpred;
@@ -243,12 +247,15 @@ end
 
 % LBG avec splitting 
 function [dictionnaire, D] = LBG_splitting(training_set, M)
-    epsilon = 0.01;   % perturbation pour le splitting
-    seuil   = 1e-3;   % seuil de convergence
+    amplitude = 5;      % taille des perturbations (en niveaux de gris)
+    seuil     = 1e-3;   % seuil de convergence
+    rng(0);             % mêmes nombres aléatoires à chaque exécution
 
     dictionnaire = mean(training_set, 2);
     while size(dictionnaire, 2) < M
-        dictionnaire = [dictionnaire.*(1+epsilon), dictionnaire.*(1-epsilon)];
+        perturbation = amplitude * randn(size(dictionnaire));
+        dictionnaire = [dictionnaire, dictionnaire + perturbation];
+
         D_prec = inf;
         while true
             [index, D] = encode_VQ(training_set, dictionnaire);
@@ -267,20 +274,21 @@ function [dictionnaire, D] = LBG_splitting(training_set, M)
 end
 
 function [index, D] = encode_VQ(vecteurs, dictionnaire)
-    n = size(vecteurs, 2);
+    n = size(vecteurs, 2);          % nb de blocs
     index = zeros(1, n);
     dist_totale = 0;
-    norme_c = sum(dictionnaire.^2, 1)';            % M x 1
-    taille_paquet = 4096;
 
-    for debut = 1 : taille_paquet : n
-        fin = min(debut + taille_paquet - 1, n);
-        X = vecteurs(:, debut:fin);                % dim x p
-        dist = norme_c - 2 * (dictionnaire' * X);  % M x p (sans ||x||^2)
-        [dmin, index(debut:fin)] = min(dist, [], 1);
-        dist_totale = dist_totale + sum(dmin + sum(X.^2, 1));
+    for k = 1 : n
+        x = vecteurs(:, k);         % le bloc k (vecteur colonne)
+
+        d2 = sum((dictionnaire - x).^2, 1);
+
+        % codeword le plus proche
+        [d2_min, index(k)] = min(d2);
+        dist_totale = dist_totale + d2_min;
     end
-    D = dist_totale / n;
+
+    D = dist_totale / n;            % distorsion moyenne par vecteur
 end
 
 %% --- BTC ---------------------------------------------------------------
@@ -328,7 +336,7 @@ function [Idec, PSNR, bits_donnees, bits_meta] = compression_BTC(I, taille_bloc)
     bits_meta    = nb_blocs * 2 * nbits_niveau + bits_entete; % a, b + en-tête
 end
 
-%% --- Quantificateur (sans variables globales) --------------------------
+%% --- Quantificateur  ---------------------------------------------------
 function Q = genere_quantif(nbits, Delta)
     N = 2^nbits;
     Q.codes = 0:(N-1);
