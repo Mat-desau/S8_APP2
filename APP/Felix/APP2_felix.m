@@ -242,7 +242,8 @@ function [Idpcm, e, e_hat] = DPCM(Image, N)
     delta_dict = [1.414; 1.0873; 0.8707; 0.7309; 0.6334; 0.5613; 0.5055; 0.4609; 0.2799];
     Laplacien = dictionary(nbits_dict, delta_dict);
 
-    delta = Laplacien(N);
+    % delta = Laplacien(N);
+    delta = 0.114;
 
     sigma_e = std(Image(:)); 
     step_size = delta * sigma_e;
