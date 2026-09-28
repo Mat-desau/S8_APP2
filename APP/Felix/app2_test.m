@@ -1,7 +1,7 @@
 %% Clear and load
 clc; clear; close all;
 
-Isource = imread("lenna.bmp");
+Isource = imread("DPCM.bmp");
 
 %% Problematique (Execution)
 tic;

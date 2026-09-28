@@ -312,6 +312,7 @@ function Ibtc = btc(Image, l, c)
             bloc_reconstruit = zeros(l, c);
             bloc_reconstruit(masque) = b;     
             bloc_reconstruit(~masque) = a;    
+
             
             Ibtc(i : i + l - 1, j : j + c - 1) = bloc_reconstruit;
             
