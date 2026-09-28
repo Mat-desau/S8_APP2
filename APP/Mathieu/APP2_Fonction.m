@@ -7,11 +7,11 @@ clear
 close all
 
 %% Paramètres
-Isource      = "lenna.bmp"; 
+% Isource      = "lenna.bmp"; 
 % Isource      = "cman.tif";
 % Isource      = "irm.tif";
 % Isource      = "mandrill.tif";
-% Isource      = "crest.bmp";
+Isource      = "crest.bmp";
 taille_cible = 256;
 
 nbits_QS   = 5;  
@@ -92,7 +92,7 @@ afficher_debit("BTC",  bits_donnees_BTC,  bits_meta_BTC,  nb_pixels)
 % afficher_image(3, Iredim_PPV,    "IRedim PPV " + taille_str(Iredim_PPV))
 % afficher_image(4, Iredim_BiL,    "IRedim BiL " + taille_str(Iredim_BiL))
 % afficher_image(5, IDecoder_QS,   "IDecoder QS "         + 2^nbits_QS   + " niveaux, PSNR = " + PSNR_QS)
-afficher_image(6, IDecoder_DPCM, "IDecoder DPCM "       + 2^nbits_DPCM + " niveaux, PSNR = " + PSNR_DPCM)
+% afficher_image(6, IDecoder_DPCM, "IDecoder DPCM "       + 2^nbits_DPCM + " niveaux, PSNR = " + PSNR_DPCM)
 % afficher_image(7, IDecoder_VQ,   "IDecoder Vectoriel "  + 2^nbits_VQ   + " codewords, PSNR = " + PSNR_VQ)
 % afficher_image(8, IDecoder_BTC,  "IDecoder BTC " + h_BTC + "x" + w_BTC + ", PSNR = " + PSNR_BTC)
 
