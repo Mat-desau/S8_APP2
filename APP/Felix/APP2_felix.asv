@@ -9,6 +9,7 @@ Isource = imread("lenna.bmp");
 %% Problematique
 clc; close all;
 
+tic
 L = 256;
 C = 256;
 nbits = 5;
@@ -16,18 +17,11 @@ N = 2^nbits;
 
 Iformat = formattageBiLin(Isource, L, C);
 
-
-tic
 Ivect = vectorielle(Iformat, nbits);
-time_vect = toc
 
-tic
 Ibtc = btc(Iformat, 2, 2);
-time_btc = toc
 
-tic
 [Idpcm, e] = DPCM(Iformat,N);
-time_dpcm = toc
 
 [Inorm, m, sigma] = normal(Iformat);
 
